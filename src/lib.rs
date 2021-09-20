@@ -4,14 +4,17 @@
 #![feature(abi_x86_interrupt)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
-
+#![feature(alloc_error_handler)]
 use core::panic::PanicInfo;
 
 pub mod interrupts;
 pub mod serial;
 pub mod vga_buffer;
 pub mod gdt;
+pub mod memory;
+pub mod allocator;
 
+extern crate alloc;
 pub fn init() {
     gdt::init();
     interrupts::init_idt();
@@ -30,6 +33,10 @@ pub fn hlt_loop()->!{
     }
 }
 
+#[alloc_error_handler]
+fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
+    panic!("allocation error: {:?}", layout)
+}
 impl<T> Testable for T
     where
         T: Fn(),
@@ -74,11 +81,18 @@ pub fn exit_qemu(exit_code: QemuExitCode) {
 
 /// Entry point for `cargo xtest`
 #[cfg(test)]
-#[no_mangle]
-pub extern "C" fn _start() -> ! {
+use bootloader::{entry_point, BootInfo};
+
+#[cfg(test)]
+entry_point!(test_kernel_main);
+
+/// Entry point for `cargo test`
+#[cfg(test)]
+fn test_kernel_main(_boot_info: &'static BootInfo) -> ! {
+    // like before
     init();
     test_main();
-    hlt_loop();         // new
+    hlt_loop();
 }
 
 #[cfg(test)]
